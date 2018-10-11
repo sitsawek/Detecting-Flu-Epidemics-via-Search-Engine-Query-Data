@@ -1,0 +1,184 @@
+> #Load the csv file FluTrain.csv aggregates this data from January 1, 2004 until December 31, 2011
+> flu_train = read.csv("FluTrain.csv")
+> #"Week" - The range of dates represented by this observation, in year/month/day format.
+> #"ILI" - This column lists the percentage of ILI-related physician visits for the corresponding week.
+> #"Queries" - This column lists the fraction of queries that are ILI-related for the corresponding week, adjusted to be between 0 and 1 (higher values correspond to more ILI-related search queries).
+> str(flu_train)
+'data.frame':	417 obs. of  3 variables:
+ $ Week   : Factor w/ 417 levels "2004-01-04 - 2004-01-10",..: 1 2 3 4 5 6 7 8 9 10 ...
+ $ ILI    : num  2.42 1.81 1.71 1.54 1.44 ...
+ $ Queries: num  0.238 0.22 0.226 0.238 0.224 ...
+> #which week corresponds to the highest percentage of ILI-related physician visits?
+> which.max(flu_train$ILI)
+[1] 303
+> flu_train[303,]
+                       Week      ILI Queries
+303 2009-10-18 - 2009-10-24 7.618892       1
+> #When handling a skewed dependent variable, it is often useful to predict the logarithm of the dependent variable instead of the dependent variable itself.
+> #this prevents the small number of unusually large or small observations from having an undue influence on the sum of squared errors of predictive models.
+> #In this problem, we will predict the natural log of the ILI variable, which can be computed in R using the log() function.
+> model1 = lm(log(ILI)~Queries,data = flu_train)
+> summary(model1)
+
+Call:
+lm(formula = log(ILI) ~ Queries, data = flu_train)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-0.76003 -0.19696 -0.01657  0.18685  1.06450 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -0.49934    0.03041  -16.42   <2e-16 ***
+Queries      2.96129    0.09312   31.80   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.2995 on 415 degrees of freedom
+Multiple R-squared:  0.709,	Adjusted R-squared:  0.7083 
+F-statistic:  1011 on 1 and 415 DF,  p-value: < 2.2e-16
+
+> #For a single variable linear regression model, there is a direct relationship between the R-squared and the correlation between the independent and the dependent variables. 
+> cor(log(flu_train$ILI),flu_train$Queries)^2
+[1] 0.7090201
+> #Correlationship between log(ILI) and Queries equal R square is 0.709
+> #Load the csv file FluTest.csv provides the 2012 weekly data of the ILI-related search queries and the observed weekly percentage of ILI-related physician visits.
+> flu_test = read.csv("FluTest.csv")
+> #However, the dependent variable in our model is log(ILI), so pred1 would contain predictions of the log(ILI) value.
+> #We are instead interested in obtaining predictions of the ILI value.
+> #We can convert from predictions of log(ILI) to predictions of ILI via exponentiation.
+> pred1 = exp(predict(model1,newdata = flu_test))
+> #What is our estimate for the percentage of ILI-related physician visits for the week of March 11, 2012?
+> #We must to find which row is 03, 11, 2012 
+> which(flu_test$Week == "2012-03-11 - 2012-03-17")
+[1] 11
+> pred1[11]
+      11 
+2.187378 
+> #What is the relative error betweeen the estimate (our prediction) and the observed value for the week of March 11, 2012?
+> #We use (Observed ILI - Estimated ILI)/Observed ILI to find out.
+> (flu_test$ILI[11]-pred1[11])/flu_test$ILI[11]
+        11 
+0.04623827 
+> #Find performance on test set
+> #What is the Root Mean Square Error (RMSE) between our estimates and the actual observations for the percentage of ILI-related physician visits, on the test set?
+> sse = sum((pred1 - flu_test$ILI)^2)
+> sqrt(sse/nrow(flu_test))
+[1] 0.7490645
+> #Then RMSE is 0.7490645
+> #The observations in this dataset are consecutive weekly measurements of the dependent and independent variables.
+> #This sort of dataset is called a "time series."
+> #Often, statistical models can be improved by predicting the current value of the dependent variable using the value of the dependent variable from earlier weeks.
+> #In our models, this means we will predict the ILI variable in the current week using values of the ILI variable from previous weeks.
+> #First, we need to decide the amount of time to lag the observations. Because the ILI variable is reported with a 1- or 2-week lag.
+> #A decision maker cannot rely on the previous week's ILI value to predict the current week's value.
+> #nstead, the decision maker will only have data available from 2 or more weeks ago. We will build a variable called ILILag2 that contains the ILI value from 2 weeks before the current observation.
+> #To do so, we will use the "zoo" package, which provides a number of helpful methods for time series models.
+> #While many functions are built into R, you need to add new packages to use some functions.
+> #Call library zoo
+> library(zoo)
+> ILILag2 = lag(zoo(flu_train$ILI), -2, na.pad=TRUE)
+> #Add LILLag2 to flu_train
+> flu_train$ILILag2 = coredata(ILILag2)
+> #In these commands, the value of -2 passed to lag means to return 2 observations before the current one; a positive value would have returned future observations.
+> #The parameter na.pad=TRUE means to add missing values for the first two weeks of our dataset, where we can't compute the data from 2 weeks earlier.
+> #We will see missing value on ILILag2 is 2 value.
+> summary(flu_train)
+                      Week          ILI            Queries           ILILag2      
+ 2004-01-04 - 2004-01-10:  1   Min.   :0.5341   Min.   :0.04117   Min.   :0.5341  
+ 2004-01-11 - 2004-01-17:  1   1st Qu.:0.9025   1st Qu.:0.15671   1st Qu.:0.9010  
+ 2004-01-18 - 2004-01-24:  1   Median :1.2526   Median :0.28154   Median :1.2519  
+ 2004-01-25 - 2004-01-31:  1   Mean   :1.6769   Mean   :0.28603   Mean   :1.6754  
+ 2004-02-01 - 2004-02-07:  1   3rd Qu.:2.0587   3rd Qu.:0.37849   3rd Qu.:2.0580  
+ 2004-02-08 - 2004-02-14:  1   Max.   :7.6189   Max.   :1.00000   Max.   :7.6189  
+ (Other)                :411                                      NA's   :2       
+> #Plot to see relationship between log(ILI) and log(ILILag2)
+> plot(log(flu_train$ILI),log(flu_train$ILILag2))
+> #Build model2 with add ILILag2 featured
+> model2 = lm(log(ILI)~Queries+log(ILILag2),data = flu_train)
+> summary(model2)
+
+Call:
+lm(formula = log(ILI) ~ Queries + log(ILILag2), data = flu_train)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-0.52209 -0.11082 -0.01819  0.08143  0.76785 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  -0.24064    0.01953  -12.32   <2e-16 ***
+Queries       1.25578    0.07910   15.88   <2e-16 ***
+log(ILILag2)  0.65569    0.02251   29.14   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1703 on 412 degrees of freedom
+  (2 observations deleted due to missingness)
+Multiple R-squared:  0.9063,	Adjusted R-squared:  0.9059 
+F-statistic:  1993 on 2 and 412 DF,  p-value: < 2.2e-16
+
+> #R square is 0.9063
+> summary(model1)
+
+Call:
+lm(formula = log(ILI) ~ Queries, data = flu_train)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-0.76003 -0.19696 -0.01657  0.18685  1.06450 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -0.49934    0.03041  -16.42   <2e-16 ***
+Queries      2.96129    0.09312   31.80   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.2995 on 415 degrees of freedom
+Multiple R-squared:  0.709,	Adjusted R-squared:  0.7083 
+F-statistic:  1011 on 1 and 415 DF,  p-value: < 2.2e-16
+
+> #We will see model2(0.9063) stronger than model1 (0.709)
+> #Evaluating the Time Series Model in the Test Set
+> #We must to add ILILag2 in flu_test before test.
+> ILILag2 = lag(zoo(flu_test$ILI), -2, na.pad=TRUE)
+> flu_test$ILILag2 =coredata(ILILag2)
+> summary(flu_test)
+                      Week         ILI            Queries          ILILag2      
+ 2012-01-01 - 2012-01-07: 1   Min.   :0.9018   Min.   :0.2390   Min.   :0.9018  
+ 2012-01-08 - 2012-01-14: 1   1st Qu.:1.1535   1st Qu.:0.2772   1st Qu.:1.1359  
+ 2012-01-15 - 2012-01-21: 1   Median :1.3592   Median :0.3924   Median :1.3409  
+ 2012-01-22 - 2012-01-28: 1   Mean   :1.6638   Mean   :0.4094   Mean   :1.5188  
+ 2012-01-29 - 2012-02-04: 1   3rd Qu.:1.8637   3rd Qu.:0.4874   3rd Qu.:1.7606  
+ 2012-02-05 - 2012-02-11: 1   Max.   :6.0336   Max.   :0.8054   Max.   :3.6002  
+ (Other)                :46                                     NA's   :2       
+> #In this problem, the training and testing sets are split sequentially -- the training set contains all observations from 2004-2011 and the testing set contains all observations from 2012. 
+> #There is no time gap between the two datasets, meaning the first observation in FluTest was recorded one week after the last observation in FluTrain.
+> #The ILI value of the second-to-last observation in the flu_train data frame should be used to fill in the ILILag2 variable for the first observation in flu_test.
+> #The ILI value of the last observation in the flu_train data frame should be used to fill in the ILILag2 variable for the second observation in flu_test.
+> dim(flu_train)
+[1] 417   4
+> flu_test$ILILag2[1:2] = flu_train$ILI[416:417]
+> summary(flu_test)
+                      Week         ILI            Queries          ILILag2      
+ 2012-01-01 - 2012-01-07: 1   Min.   :0.9018   Min.   :0.2390   Min.   :0.9018  
+ 2012-01-08 - 2012-01-14: 1   1st Qu.:1.1535   1st Qu.:0.2772   1st Qu.:1.1535  
+ 2012-01-15 - 2012-01-21: 1   Median :1.3592   Median :0.3924   Median :1.3592  
+ 2012-01-22 - 2012-01-28: 1   Mean   :1.6638   Mean   :0.4094   Mean   :1.5368  
+ 2012-01-29 - 2012-02-04: 1   3rd Qu.:1.8637   3rd Qu.:0.4874   3rd Qu.:1.8554  
+ 2012-02-05 - 2012-02-11: 1   Max.   :6.0336   Max.   :0.8054   Max.   :3.6002  
+ (Other)                :46                                                     
+> str(flu_test)
+'data.frame':	52 obs. of  4 variables:
+ $ Week   : Factor w/ 52 levels "2012-01-01 - 2012-01-07",..: 1 2 3 4 5 6 7 8 9 10 ...
+ $ ILI    : num  1.77 1.54 1.65 1.68 1.86 ...
+ $ Queries: num  0.594 0.499 0.501 0.479 0.471 ...
+ $ ILILag2: num  1.85 2.12 1.77 1.54 1.65 ...
+> #What is the test-set RMSE of the model2?
+> pred2 = exp(predict(model2,newdata = flu_test))
+> sse = sum((pred2-flu_test$ILI)^2)
+> RMSE = sqrt(sse/nrow(flu_test))
+> RMSE
+[1] 0.2942029
+> 
